@@ -10,7 +10,7 @@
 #include <limits.h>
 #define K 1024
 
-void cpyFile(char* name, char* path, int tmpInfo, int tmpArc)
+void pushFile(char* name, char* path, int tmpInfo, int tmpArc)
 {
 	int in = open(name, O_RDONLY); 
 	long size = 0;
@@ -26,7 +26,7 @@ void cpyFile(char* name, char* path, int tmpInfo, int tmpArc)
 	write(tmpInfo, infoString, strlen(infoString)); 
 }
 
-int dig(char* dir, char* path, int tmpInfo, int tmpArc)
+int digPath(char* dir, char* path, int tmpInfo, int tmpArc)
 {
 	int numOfFiles = 0;
 	char nextPath[K];
@@ -42,14 +42,14 @@ int dig(char* dir, char* path, int tmpInfo, int tmpArc)
 				strcmp(".", entry->d_name) == 0) 
 				continue;
 			sprintf(nextPath, "%s%s/", path, entry->d_name);
-			dig(entry->d_name, nextPath, tmpInfo, tmpArc);
+			digPath(entry->d_name, nextPath, tmpInfo, tmpArc);
 		} else {
-			cpyFile(entry->d_name, path, tmpInfo, tmpArc);
+			pushFile(entry->d_name, path, tmpInfo, tmpArc);
 			numOfFiles++;
 		}
 	}
 	if (numOfFiles == 0) {
-		cpyFile(".", path, tmpInfo, tmpArc);
+		pushFile(".", path, tmpInfo, tmpArc);
 	}
 	chdir("..");
 	closedir(dp);
@@ -67,14 +67,14 @@ void pack(int argn, char** args, int archive)
 			if (S_ISDIR(statbuf.st_mode)) {
 				char dirName[K];
 				sprintf(dirName, "%s/", basename(args[i]));
-				dig(args[i], dirName, tmpInfo, tmpArc);
+				digPath(args[i], dirName, tmpInfo, tmpArc);
 				chdir(cwd);
 			} else {
 				char fileName[K], dirName[K]; 
 				sprintf(fileName, "%s", basename(args[i]));
 				sprintf(dirName, "%s", dirname(args[i]));
 				chdir(dirName);	
-				cpyFile(fileName, ".", tmpInfo, tmpArc);
+				pushFile(fileName, ".", tmpInfo, tmpArc);
 				chdir(cwd);
 			}
 		}
