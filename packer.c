@@ -12,7 +12,7 @@
 
 void pushFile(char* name, char* path, int tmpInfo, int tmpArc)
 {
-	int in = open(name, O_RDONLY); 
+	int in = open(name, O_RDONLY);
 	long size = 0;
 	if (strcmp(name, ".") != 0) {
 		char block[64*K];
@@ -20,10 +20,10 @@ void pushFile(char* name, char* path, int tmpInfo, int tmpArc)
 		while ((red = read(in, block, sizeof(block))) > 0 )
 			write(tmpArc, block, red);
 		size = lseek(in, 0, SEEK_END);
-	} 
-	char infoString[K]; 
+	}
+	char infoString[K];
 	sprintf(infoString, "%s||%s||%ld||", path, name, size);
-	write(tmpInfo, infoString, strlen(infoString)); 
+	write(tmpInfo, infoString, strlen(infoString));
 }
 
 int digPath(char* dir, char* path, int tmpInfo, int tmpArc)
@@ -37,16 +37,15 @@ int digPath(char* dir, char* path, int tmpInfo, int tmpArc)
 	chdir(dir);
 	while((entry = readdir(dp)) != NULL) {
 		lstat(entry->d_name, &statbuf);
+		numOfFiles++;
 		if (S_ISDIR(statbuf.st_mode)) {
-			if (strcmp("..", entry->d_name) == 0 || 
-				strcmp(".", entry->d_name) == 0) 
+			if (strcmp("..", entry->d_name) == 0 ||
+				strcmp(".", entry->d_name) == 0)
 				continue;
 			sprintf(nextPath, "%s%s/", path, entry->d_name);
 			digPath(entry->d_name, nextPath, tmpInfo, tmpArc);
-		} else {
+		} else
 			pushFile(entry->d_name, path, tmpInfo, tmpArc);
-			numOfFiles++;
-		}
 	}
 	if (numOfFiles == 0) {
 		pushFile(".", path, tmpInfo, tmpArc);
@@ -59,21 +58,21 @@ void pack(int argn, char** args, int archive)
 {
 	char cwd[K];
 	getcwd(cwd, K);
-	int tmpInfo = open(".tmpInfo", O_RDWR | O_CREAT | O_APPEND, S_IWUSR); 	
-	int tmpArc = open(".tmpArc", O_RDWR | O_CREAT | O_APPEND, S_IWUSR ); 	
+	int tmpInfo = open(".tmpInfo", O_RDWR | O_CREAT | O_APPEND, S_IWUSR);
+	int tmpArc = open(".tmpArc", O_RDWR | O_CREAT | O_APPEND, S_IWUSR );
 	struct stat statbuf;
 	for (int i = 3; i < argn; i++) {
-		if (lstat(args[i], &statbuf) == 0) { 
+		if (lstat(args[i], &statbuf) == 0) {
 			if (S_ISDIR(statbuf.st_mode)) {
 				char dirName[K];
 				sprintf(dirName, "%s/", basename(args[i]));
 				digPath(args[i], dirName, tmpInfo, tmpArc);
 				chdir(cwd);
 			} else {
-				char fileName[K], dirName[K]; 
+				char fileName[K], dirName[K];
 				sprintf(fileName, "%s", basename(args[i]));
 				sprintf(dirName, "%s", dirname(args[i]));
-				chdir(dirName);	
+				chdir(dirName);
 				pushFile(fileName, ".", tmpInfo, tmpArc);
 				chdir(cwd);
 			}
@@ -92,7 +91,7 @@ void pack(int argn, char** args, int archive)
 	unlink(".tmpArc");
 	printf("Архивация прошла успешно\n");
 }
-	
+
 int checkPath(char* path)
 {
 	char fPath[strlen(path)];
@@ -102,16 +101,16 @@ int checkPath(char* path)
 	newDir = strtok(fPath, "/");
 	if ((dp=opendir(newDir)) == NULL) {
 		if (mkdir(newDir, S_IRUSR | S_IWUSR | S_IXUSR) != 0) return -1;
-	} else 
+	} else
 		closedir(dp);
 	char cwd[K];
 	getcwd(cwd, K);
 	chdir(newDir);
 	while ((newDir = strtok(NULL, "/")) != NULL) {
 		if ((dp=opendir(newDir)) == NULL) {
-			if (mkdir(newDir, S_IRUSR | S_IWUSR | S_IXUSR) != 0) 
+			if (mkdir(newDir, S_IRUSR | S_IWUSR | S_IXUSR) != 0)
 				return -1;
-		} else 
+		} else
 			closedir(dp);
 		chdir(newDir);
 	}
@@ -126,14 +125,14 @@ int popFile(char* path, char* name, char* size, int archive)
 						S_IRUSR | S_IWUSR)) == -1) {
 	struct stat statbuf;
 		if (lstat(name, &statbuf) == 0) {
-			printf("Файл с именем %s уже существует\nУдалить? [y\\n]\n", name); 
+			printf("Файл с именем %s уже существует\nУдалить? [y\\n]\n", name);
 			char q[K];
 			scanf("%s", q);
 			if (strcmp(q, "y") == 0 || strcmp(q, "Y") == 0) {
 				if (S_ISDIR(statbuf.st_mode))
 					rmdir(name);
 				else
-					unlink(name);  
+					unlink(name);
 				if ((outFile = open(name, O_WRONLY | O_CREAT | O_APPEND,
 									S_IRUSR | S_IWUSR)) == -1) {
 					printf("Невозможно создать файл %s%s%s",
@@ -145,7 +144,7 @@ int popFile(char* path, char* name, char* size, int archive)
 			printf("Невозможно создать файл %s%s%s",
 				   "\nРазархивация прервана\n", path, name);
 			return -1;
-		}	
+		}
 	}
 	char *result = malloc(atoi(size));;
 	read(archive, result, atoi(size));
@@ -174,7 +173,7 @@ int unpack(int archive)
 	size = strtok_r(NULL, "||", &saveptr);
 	while (path != NULL || name != NULL || size != NULL) {
 		if (checkPath(path) == -1) {
-			printf("Невозможно создать директорию %s\n", path); 
+			printf("Невозможно создать директорию %s\n", path);
 			return -1;
 		}
 		if (strcmp(name, ".") != 0) {
@@ -195,7 +194,7 @@ int unpack(int archive)
 						if (strcmp(q, "y") == 0 || strcmp(q, "Y") == 0) {
 							answered = 1;
 							unlink(name);
-							popFile(path, name, size, archive); 
+							popFile(path, name, size, archive);
 						}
 						if (strcmp(q, "nf") == 0 || strcmp(q, "NF") == 0) {
 							answered = 1;
@@ -208,10 +207,10 @@ int unpack(int archive)
 				}
 				if (yesForAll == 1) {
 					unlink(name);
-					popFile(path, name, size, archive); 
-				}		
-			} else 
-				popFile(path, name, size, archive); 
+					popFile(path, name, size, archive);
+				}
+			} else
+				popFile(path, name, size, archive);
 		}
 		path = strtok_r(NULL, "||", &saveptr);
 		name = strtok_r(NULL, "||", &saveptr);
@@ -224,32 +223,32 @@ int unpack(int archive)
 }
 
 int main(int argn, char** args)
-{	
+{
 	if (argn > 1) {
 		if (strcmp(args[1], "-p") == 0) {
-			if (argn < 4) 
+			if (argn < 4)
 				printf("Укажите имя архива, и путь к архивируемым файлам\n");
 			else {
 				struct stat statbuf;
-				if(lstat(args[2], &statbuf) == 0) { 
-					printf("Файл с именем %s уже существует\nУдалить? [y\\n]\n", args[2]); 
+				if(lstat(args[2], &statbuf) == 0) {
+					printf("Файл с именем %s уже существует\nУдалить? [y\\n]\n", args[2]);
 					char q[K];
 					scanf("%s", q);
 					if (strcmp(q, "y") == 0 || strcmp(q, "Y") == 0) {
 						if (S_ISDIR(statbuf.st_mode))
 							rmdir(args[2]);
 						else
-							unlink(args[2]); 
-					} else { 
+							unlink(args[2]);
+					} else {
 						printf("Архивация прервана\n");
-						return -1; 
+						return -1;
 					}
 				}
 				for (int i = 3; i < argn; i++) {
-					if( lstat(args[i], &statbuf ) != 0) { 
-						printf("Файла %s не существует\n", args[i]); 
+					if( lstat(args[i], &statbuf ) != 0) {
+						printf("Файла %s не существует\n", args[i]);
 						printf("Архивация прервана\n");
-						return -1; 		
+						return -1;
 					}
 				}
 				char arcName[K], arcPath[K], arcFullName[K];
@@ -258,22 +257,22 @@ int main(int argn, char** args)
 				sprintf(arcFullName,"%s/%s", arcPath, arcName);
 				checkPath(arcPath);
 				int archive; // дескриптор файла - архива
-				if ((archive = open(arcFullName, 
+				if ((archive = open(arcFullName,
 									O_WRONLY | O_CREAT | O_APPEND, S_IRUSR)) == -1) {
 					printf("Невозможно создать файл %s\n", arcFullName);
 					return -1;
 				} else {
-					pack(argn, args, archive);	
+					pack(argn, args, archive);
 				}
 			}
-		} else 
+		} else
 			if (strcmp(args[1], "-u") == 0) {
 				if (argn < 4)
 					printf("Укажите путь к архиву и путь разархивации\n");
 				else {
 					struct stat statbuf;
-					if(lstat(args[2], &statbuf) != 0) { 
-						printf("Файла %s не существует\n", args[2]); 
+					if(lstat(args[2], &statbuf) != 0) {
+						printf("Файла %s не существует\n", args[2]);
 						return 0;
 					}
 					int archive;
@@ -288,10 +287,10 @@ int main(int argn, char** args)
 					chdir(args[3]);
 					unpack(archive);
 				}
-			} else 
+			} else
 				printf("Ключ -p/-u обязателен\n");
 	}
-	else { 
+	else {
 		printf("Запускайте программу со следующими параметрами:%s",
 			   "\n-p\\-u <имя_архива> <имена архивируемых файлов>\n");
 	}
