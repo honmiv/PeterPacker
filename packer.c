@@ -10,17 +10,20 @@
 #include <limits.h>
 #define K 1024
 
-void pushInfo(char* name, char* path, char* infoString, char* workInfoString, char* dirName)
+void pushInfo(char* name, char* path, char* infoStr, char* workInfo, char* dirName)
 {
-	int in = open(name, O_RDONLY);
-	long size = 0;
+    int in = open(name, O_RDONLY);
+    long size = 0;
 	if (strcmp(name, ".") != 0)
-		size = lseek(in, 0, SEEK_END);
-	sprintf(infoString, "%s%s||%s||%ld||", infoString, path, name, size);
-	sprintf(workInfoString,"%s%s/%s||%s||%ld||", workInfoString, dirName, path, name, size);
+        size = lseek(in, 0, SEEK_END);
+    close(in);
+    char* oldInfo = infoStr;      // иначе ругается cppcheck
+    char* oldWorkInfo = workInfo; // иначе ругается cppcheck
+    sprintf(infoStr, "%s%s||%s||%ld||", oldInfo, path, name, size);
+    sprintf(workInfo, "%s%s/%s||%s||%ld||", oldWorkInfo, dirName, path, name, size);
 }
 
-int digPath(char* dir, char* path, char* infoString, char* workInfoString, char* dirName)
+int digPath(char* dir, char* path, char* infoStr, char* workInfo, char* dirName)
 {
 	int numOfFiles = 0;
 	char nextPath[K];
@@ -33,26 +36,24 @@ int digPath(char* dir, char* path, char* infoString, char* workInfoString, char*
 		lstat(entry->d_name, &statbuf);
 		numOfFiles++;
 		if (S_ISDIR(statbuf.st_mode)) {
-			if (strcmp("..", entry->d_name) == 0 ||
-				strcmp(".", entry->d_name) == 0)
+			if (strcmp("..", entry->d_name) == 0 || strcmp(".", entry->d_name) == 0)
 				continue;
 			sprintf(nextPath, "%s%s/", path, entry->d_name);
-			digPath(entry->d_name, nextPath, infoString, workInfoString, dirName);
+			digPath(entry->d_name, nextPath, infoStr, workInfo, dirName);
 		} else {
-			pushInfo(entry->d_name, path, infoString, workInfoString, dirName);
+			pushInfo(entry->d_name, path, infoStr, workInfo, dirName);
 		}
 	}
-	if (numOfFiles == 0) {
-		pushInfo(".", path, infoString, workInfoString, dirName);
-	}
+	if (numOfFiles == 0)
+		pushInfo(".", path, infoStr, workInfo, dirName);
 	chdir("..");
 	closedir(dp);
 }
 
 void pack(int argn, char** args, int archive, char* arcPath)
 {
-	char infoString[64*K] = {'\0'};
-	char workInfoString[64*K] = {'\0'};
+	char infoStr[64*K] = {'\0'};
+	char workInfo[64*K] = {'\0'};
 	char cwd[K];
 	getcwd(cwd, K);
 	struct stat statbuf;
@@ -62,23 +63,22 @@ void pack(int argn, char** args, int archive, char* arcPath)
 			if (S_ISDIR(statbuf.st_mode)) {
 				sprintf(fileName, "%s/", basename(args[i]));
 				sprintf(dirName, "%s/", dirname(args[i]));
-				sprintf(fullName,"%s%s",dirName,fileName);
-				digPath(fullName, fileName, infoString, workInfoString, dirName);
+				sprintf(fullName,"%s%s", dirName, fileName);
+				digPath(fullName, fileName, infoStr, workInfo, dirName);
 				chdir(cwd);
 			} else {
 				sprintf(fileName, "%s", basename(args[i]));
 				sprintf(dirName, "%s", dirname(args[i]));
 				chdir(dirName);
-				pushInfo(fileName, ".", infoString, workInfoString, dirName);
+				pushInfo(fileName, ".", infoStr, workInfo, dirName);
 				chdir(cwd);
 			}
 		}
 	}
-
-	write(archive, infoString, strlen(infoString));
+	write(archive, infoStr, strlen(infoStr));
 	write(archive, "\n", 1);
 	char workPath[K], *path, *name, *size, *saveptr;
-	path = strtok_r(workInfoString, "||", &saveptr);
+	path = strtok_r(workInfo, "||", &saveptr);
 	name = strtok_r(NULL, "||", &saveptr);
 	size = strtok_r(NULL, "||", &saveptr);
 	while (path != NULL || name != NULL || size != NULL) {
@@ -126,10 +126,9 @@ int checkPath(char* path)
 
 int popFile(char* path, char* name, char* size, int archive)
 {
-	int outFile;
-	if ((outFile = open(name, O_WRONLY | O_CREAT | O_APPEND,
-						S_IRUSR | S_IWUSR)) == -1) {
-	struct stat statbuf;
+	int outFile = open(name, O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR);
+	if (outFile == -1) {
+		struct stat statbuf;
 		if (lstat(name, &statbuf) == 0) {
 			printf("Файл с именем %s уже существует\nУдалить? [y\\n]\n", name);
 			char q[K];
@@ -165,15 +164,15 @@ int unpack(int archive)
 	int yesForAll = 0;
 	char cwd[K];
 	getcwd(cwd, K);
-	char infoString[64*K] = {'\0'};
+	char infoStr[64*K] = {'\0'};
 	char c;
 	read(archive, &c, 1);
 	while (c != '\n') {
-		infoString[strlen(infoString)]=c;
+		infoStr[strlen(infoStr)]=c;
 		read(archive, &c, 1);
 	}
 	char *path, *name, *size, *saveptr;
-	path = strtok_r(infoString, "||", &saveptr);
+	path = strtok_r(infoStr, "||", &saveptr);
 	name = strtok_r(NULL, "||", &saveptr);
 	size = strtok_r(NULL, "||", &saveptr);
 	while (path != NULL || name != NULL || size != NULL) {
@@ -189,8 +188,8 @@ int unpack(int archive)
 					int answered = 0;
 					char q[K];
 					while (answered == 0) {
-						printf("Файл %s%s уже существует. Заменить?%s",
-							   path,name,"\n[Y/YF/N/NF] (YES/YES FOR ALL/NO/NO FOR ALL)\n");
+						printf("Файл %s%s уже существует. Заменить?%s\n", path,
+                            name, "[Y/YF/N/NF] (YES/YES FOR ALL/NO/NO FOR ALL)\n");
 						scanf("%s", q);
 						if (strcmp(q, "yf") == 0 || strcmp(q, "YF") == 0) {
 							answered = 1;
