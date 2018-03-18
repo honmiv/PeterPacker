@@ -10,23 +10,17 @@
 #include <limits.h>
 #define K 1024
 
-void pushFile(char* name, char* path, int tmpInfo, int tmpArc)
+void pushInfo(char* name, char* path, char* infoString, char* workInfoString, char* dirName)
 {
 	int in = open(name, O_RDONLY);
 	long size = 0;
-	if (strcmp(name, ".") != 0) {
-		char block[64*K];
-		long red = 0;
-		while ((red = read(in, block, sizeof(block))) > 0 )
-			write(tmpArc, block, red);
+	if (strcmp(name, ".") != 0)
 		size = lseek(in, 0, SEEK_END);
-	}
-	char infoString[K];
-	sprintf(infoString, "%s||%s||%ld||", path, name, size);
-	write(tmpInfo, infoString, strlen(infoString));
+	sprintf(infoString, "%s%s||%s||%ld||", infoString, path, name, size);
+	sprintf(workInfoString,"%s%s/%s||%s||%ld||", workInfoString, dirName, path, name, size);
 }
 
-int digPath(char* dir, char* path, int tmpInfo, int tmpArc)
+int digPath(char* dir, char* path, char* infoString, char* workInfoString, char* dirName)
 {
 	int numOfFiles = 0;
 	char nextPath[K];
@@ -43,52 +37,63 @@ int digPath(char* dir, char* path, int tmpInfo, int tmpArc)
 				strcmp(".", entry->d_name) == 0)
 				continue;
 			sprintf(nextPath, "%s%s/", path, entry->d_name);
-			digPath(entry->d_name, nextPath, tmpInfo, tmpArc);
-		} else
-			pushFile(entry->d_name, path, tmpInfo, tmpArc);
+			digPath(entry->d_name, nextPath, infoString, workInfoString, dirName);
+		} else {
+			pushInfo(entry->d_name, path, infoString, workInfoString, dirName);
+		}
 	}
 	if (numOfFiles == 0) {
-		pushFile(".", path, tmpInfo, tmpArc);
+		pushInfo(".", path, infoString, workInfoString, dirName);
 	}
 	chdir("..");
 	closedir(dp);
 }
 
-void pack(int argn, char** args, int archive)
+void pack(int argn, char** args, int archive, char* arcPath)
 {
+	char infoString[64*K] = {'\0'};
+	char workInfoString[64*K] = {'\0'};
 	char cwd[K];
 	getcwd(cwd, K);
-	int tmpInfo = open(".tmpInfo", O_RDWR | O_CREAT | O_APPEND, S_IWUSR);
-	int tmpArc = open(".tmpArc", O_RDWR | O_CREAT | O_APPEND, S_IWUSR );
 	struct stat statbuf;
+	char fileName[K], dirName[K], fullName[K];
 	for (int i = 3; i < argn; i++) {
 		if (lstat(args[i], &statbuf) == 0) {
 			if (S_ISDIR(statbuf.st_mode)) {
-				char dirName[K];
-				sprintf(dirName, "%s/", basename(args[i]));
-				digPath(args[i], dirName, tmpInfo, tmpArc);
+				sprintf(fileName, "%s/", basename(args[i]));
+				sprintf(dirName, "%s/", dirname(args[i]));
+				sprintf(fullName,"%s%s",dirName,fileName);
+				digPath(fullName, fileName, infoString, workInfoString, dirName);
 				chdir(cwd);
 			} else {
-				char fileName[K], dirName[K];
 				sprintf(fileName, "%s", basename(args[i]));
 				sprintf(dirName, "%s", dirname(args[i]));
 				chdir(dirName);
-				pushFile(fileName, ".", tmpInfo, tmpArc);
+				pushInfo(fileName, ".", infoString, workInfoString, dirName);
 				chdir(cwd);
 			}
 		}
 	}
-	write(tmpInfo, "\n", 1);
-	lseek(tmpInfo, 0, SEEK_SET);
-	lseek(tmpArc, 0, SEEK_SET);
-	char block[64*K];
-	int red;
-	while ((red = read(tmpInfo, block, sizeof(block))) > 0)
-		write(archive, block, red);
-	while ((red = read(tmpArc, block, sizeof(block))) > 0)
-		write(archive, block, red);
-	unlink(".tmpInfo");
-	unlink(".tmpArc");
+
+	write(archive, infoString, strlen(infoString));
+	write(archive, "\n", 1);
+	char workPath[K], *path, *name, *size, *saveptr;
+	path = strtok_r(workInfoString, "||", &saveptr);
+	name = strtok_r(NULL, "||", &saveptr);
+	size = strtok_r(NULL, "||", &saveptr);
+	while (path != NULL || name != NULL || size != NULL) {
+		chdir(path);
+		int in = open(name, O_RDONLY);
+		char *result = malloc(atoi(size));;
+		read(in, result, atoi(size));
+		write(archive, result, atoi(size));
+		free(result);
+		close(in);
+		chdir(cwd);
+		path = strtok_r(NULL, "||", &saveptr);
+		name = strtok_r(NULL, "||", &saveptr);
+		size = strtok_r(NULL, "||", &saveptr);
+	}
 	printf("Архивация прошла успешно\n");
 }
 
@@ -100,7 +105,8 @@ int checkPath(char* path)
 	char *newDir;
 	newDir = strtok(fPath, "/");
 	if ((dp=opendir(newDir)) == NULL) {
-		if (mkdir(newDir, S_IRUSR | S_IWUSR | S_IXUSR) != 0) return -1;
+		if (mkdir(newDir, S_IRUSR | S_IWUSR | S_IXUSR) != 0)
+			return -1;
 	} else
 		closedir(dp);
 	char cwd[K];
@@ -162,7 +168,6 @@ int unpack(int archive)
 	char infoString[64*K] = {'\0'};
 	char c;
 	read(archive, &c, 1);
-	int red;
 	while (c != '\n') {
 		infoString[strlen(infoString)]=c;
 		read(archive, &c, 1);
@@ -256,13 +261,13 @@ int main(int argn, char** args)
 				sprintf(arcPath,"%s", dirname(args[2]));
 				sprintf(arcFullName,"%s/%s", arcPath, arcName);
 				checkPath(arcPath);
-				int archive; // дескриптор файла - архива
+				int archive;
 				if ((archive = open(arcFullName,
 									O_WRONLY | O_CREAT | O_APPEND, S_IRUSR)) == -1) {
 					printf("Невозможно создать файл %s\n", arcFullName);
 					return -1;
 				} else {
-					pack(argn, args, archive);
+					pack(argn, args, archive, arcPath);
 				}
 			}
 		} else
