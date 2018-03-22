@@ -17,8 +17,8 @@ void pushInfo(char* name, char* path, char* infoStr, char* workInfo, char* dirNa
 	if (strcmp(name, ".") != 0)
         size = lseek(in, 0, SEEK_END);
     close(in);
-    char* oldInfo = infoStr;      // иначе ругается cppcheck
-    char* oldWorkInfo = workInfo; // иначе ругается cppcheck
+    char* oldInfo = infoStr;     
+    char* oldWorkInfo = workInfo; 
     sprintf(infoStr, "%s%s||%s||%ld||", oldInfo, path, name, size);
     sprintf(workInfo, "%s%s/%s||%s||%ld||", oldWorkInfo, dirName, path, name, size);
 }
