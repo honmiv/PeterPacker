@@ -30,7 +30,10 @@ int digPath(char* dir, char* path, char* infoStr, char* workInfo, char* dirName)
 	DIR* dp;
 	struct dirent *entry;
 	struct stat statbuf;
-	dp = opendir(dir);
+	if ((dp = opendir(dir)) == NULL){
+		printf("error");
+		exit(-1);
+	}
 	chdir(dir);
 	while((entry = readdir(dp)) != NULL) {
 		lstat(entry->d_name, &statbuf);
@@ -75,8 +78,14 @@ void pack(int argn, char** args, int archive, char* arcPath)
 			}
 		}
 	}
-	write(archive, infoStr, strlen(infoStr));
-	write(archive, "\n", 1);
+	if (write(archive, infoStr, strlen(infoStr)) != strlen(infoStr)) {
+		printf("error");
+		exit(-1);
+	}
+	if (write(archive, "\n", 1) != 1){
+		printf("error");
+		exit(-1);
+	}
 	char workPath[K], *path, *name, *size, *saveptr;
 	path = strtok_r(workInfo, "||", &saveptr);
 	name = strtok_r(NULL, "||", &saveptr);
@@ -85,8 +94,14 @@ void pack(int argn, char** args, int archive, char* arcPath)
 		chdir(path);
 		int in = open(name, O_RDONLY);
 		char *result = malloc(atoi(size));;
-		read(in, result, atoi(size));
-		write(archive, result, atoi(size));
+		if (read(in, result, atoi(size)) != atoi(size)){
+			printf("error");
+			exit(-1);
+		}
+		if (write(archive, result, atoi(size)) != atoi(size)){
+			printf("error");
+			exit(-1);
+		}
 		free(result);
 		close(in);
 		chdir(cwd);
@@ -152,8 +167,14 @@ int popFile(char* path, char* name, char* size, int archive)
 		}
 	}
 	char *result = malloc(atoi(size));;
-	read(archive, result, atoi(size));
-	write(outFile, result, atoi(size));
+	if (read(archive, result, atoi(size)) != atoi(size)){
+		printf("error");
+		exit(-1);
+	}
+	if (write(outFile, result, atoi(size)) != atoi(size)){
+		printf("error");
+		exit(-1);
+	}
 	free(result);
 	close(outFile);
 	return 0;
@@ -166,10 +187,16 @@ int unpack(int archive)
 	getcwd(cwd, K);
 	char infoStr[64*K] = {'\0'};
 	char c;
-	read(archive, &c, 1);
+	if (read(archive, &c, 1) != 1){
+		printf("error");
+		exit(-1);
+	}
 	while (c != '\n') {
 		infoStr[strlen(infoStr)]=c;
-		read(archive, &c, 1);
+		if (read(archive, &c, 1) != 1){
+			printf("error");
+			exit(-1);
+		}
 	}
 	char *path, *name, *size, *saveptr;
 	path = strtok_r(infoStr, "||", &saveptr);
